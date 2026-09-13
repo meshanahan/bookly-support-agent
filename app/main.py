@@ -12,6 +12,7 @@ without touching the agent.
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .agent import run_turn
+from .llm import complete
 from .state import Conversation
 
 TIMEOUT_S = 25.0
@@ -76,11 +78,25 @@ async def chat(req: ChatRequest) -> dict[str, Any]:
     conv = load_conversation(req.conversation_id)
     conv.mode = req.mode if req.mode in ("text", "voice") else "text"
     t0 = time.perf_counter()
+
+    # The turn runs against a copy and is committed only if it finishes. A
+    # thread cannot be cancelled, so on timeout `run_turn` keeps going for a
+    # while on whatever object it holds; if that were the stored conversation
+    # it would apply state changes and even execute a return on a turn the
+    # customer was just told had failed. `stop` asks it to stop at the next
+    # round boundary; the copy is what makes that safe rather than merely
+    # cheaper.
+    working = conv.model_copy(deep=True)
+    stop = threading.Event()
     try:
-        result = await asyncio.wait_for(asyncio.to_thread(run_turn, conv, req.text), TIMEOUT_S)
+        result = await asyncio.wait_for(
+            asyncio.to_thread(run_turn, working, req.text, complete, stop.is_set), TIMEOUT_S
+        )
         reply, state, trace = result.reply, result.state, result.trace
         llm_ms, total_ms, llm_calls = result.llm_ms, result.total_ms, result.llm_calls
+        conv = working  # commit: the turn finished
     except Exception as exc:
+        stop.set()  # the abandoned turn is still running; ask it to stop
         # One friendly line, never a stack trace — and say which thing happened.
         slow = isinstance(exc, TimeoutError)  # asyncio.TimeoutError since 3.11
         reply, state, trace = (TIMEOUT_REPLY if slow else ERROR_REPLY), conv.state, []

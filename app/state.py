@@ -19,10 +19,17 @@ from pydantic import BaseModel, Field
 
 # The procedure table. `human_handoff` is the one terminal procedure: no tools,
 # no exits, because a teammate now owns the conversation.
+#
+# It is deliberately not an `exit` of anything either, so `route_to` cannot
+# reach it: the only way in is `escalate_to_human`, which sets the state itself
+# in `_apply_effects`. When it *was* an exit, a model that ignored the
+# `department` enum could route straight here, and the customer was told a
+# teammate was coming when no handoff had been queued. The enum is the model's
+# instruction; this table is the enforcement.
 STATES: dict[str, dict[str, list[str]]] = {
     "triage": {
         "tools": ["route_to", "escalate_to_human"],
-        "exits": ["orders", "returns", "general", "human_handoff"],
+        "exits": ["orders", "returns", "general"],
     },
     "orders": {
         "tools": [
@@ -32,7 +39,7 @@ STATES: dict[str, dict[str, list[str]]] = {
             "search_policy",
             "escalate_to_human",
         ],
-        "exits": ["returns", "general", "human_handoff"],
+        "exits": ["returns", "general"],
     },
     "returns": {
         "tools": [
@@ -44,7 +51,7 @@ STATES: dict[str, dict[str, list[str]]] = {
             "search_policy",
             "escalate_to_human",
         ],
-        "exits": ["orders", "general", "human_handoff"],
+        "exits": ["orders", "general"],
     },
     "general": {
         "tools": [
@@ -53,7 +60,7 @@ STATES: dict[str, dict[str, list[str]]] = {
             "send_password_reset",
             "escalate_to_human",
         ],
-        "exits": ["orders", "returns", "human_handoff"],
+        "exits": ["orders", "returns"],
     },
     "human_handoff": {"tools": [], "exits": []},
 }

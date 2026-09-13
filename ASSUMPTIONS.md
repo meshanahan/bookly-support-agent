@@ -77,7 +77,19 @@ Plainly, what this demo does not do.
   is channel-agnostic by design.
 
 - **The conversation store is a process-local dict.** Restarting the server
-  drops every conversation, and it will not survive more than one worker.
+  drops every conversation, and it will not survive more than one worker. It
+  is also unbounded and unlocked: nothing evicts old conversations, and two
+  requests arriving for the same conversation at once would interleave their
+  writes. A single customer with one browser tab cannot do this, which is why
+  it is a limit rather than a bug, but Redis plus a per-conversation lock is
+  the real answer.
+
+- **A timed-out turn is abandoned, not cancelled.** `asyncio.wait_for` cannot
+  stop a thread. The turn therefore runs against a deep copy that is committed
+  only if it finishes, and a `should_stop` flag ends it at the next round
+  boundary — so a turn the customer was told had failed cannot change state or
+  execute a return behind them. It may still finish the one model call that
+  was already in flight. See `DEMO_NOTES.md` for the measurements.
 
 ## What I would change first, in order
 

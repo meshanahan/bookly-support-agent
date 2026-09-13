@@ -117,6 +117,7 @@ def run_turn(
     conv: Conversation,
     text: str,
     llm: Callable[..., LLMResult] = complete,
+    should_stop: Callable[[], bool] | None = None,
 ) -> TurnResult:
     """Run one customer turn to completion and return what the UI needs.
 
@@ -124,6 +125,10 @@ def run_turn(
         conv: the conversation being mutated in place (messages, state, ticket).
         text: the customer's utterance — typed, or a speech-to-text transcript.
         llm: the completion function; tests inject a FakeLLM with the same shape.
+        should_stop: polled at each round boundary. `main.py` sets it when the
+            request has already timed out, because `asyncio.wait_for` cannot
+            cancel the thread this runs on and an abandoned turn would
+            otherwise keep calling the model.
 
     Returns:
         TurnResult(reply, state, trace, llm_ms, total_ms, llm_calls).
@@ -184,6 +189,22 @@ def run_turn(
     conv.turns += 1
     conv.messages.append({"role": "user", "content": text})
     t0 = time.perf_counter()
+
+    # A teammate already owns this conversation, so there is nothing to decide:
+    # the state has no tools, and a model asked to improvise without them can
+    # only invent. Answer with the fixed line and never call the model. Live
+    # runs without this had the agent reply "Of course — what do you need help
+    # with?" after the handoff. The customer's words are still recorded, so the
+    # teammate picking this up sees everything that was said.
+    if conv.state == "human_handoff":
+        conv.messages.append({"role": "assistant", "content": [{"type": "text",
+                                                                "text": HANDOFF_LINE}]})
+        return TurnResult(
+            reply=HANDOFF_LINE,
+            state=conv.state,
+            total_ms=int((time.perf_counter() - t0) * 1000),
+        )
+
     trace: list[dict[str, Any]] = []
     llm_ms = llm_calls = 0
     reply = ""
@@ -191,6 +212,17 @@ def run_turn(
     out: LLMResult | None = None
 
     for _ in range(MAX_STEPS):
+        # The caller has given up on this turn; stop before spending another
+        # call. Whatever we return here is discarded by `main.py`.
+        if should_stop is not None and should_stop():
+            return TurnResult(
+                reply=" ".join(said) or FALLBACK_LINE,
+                state=conv.state,
+                trace=trace,
+                llm_ms=llm_ms,
+                total_ms=int((time.perf_counter() - t0) * 1000),
+                llm_calls=llm_calls,
+            )
         system = build_system_prompt(conv.state, conv.mode, today(), conv.ticket)
         conv.messages = compact_context(conv.messages)
         out = llm(

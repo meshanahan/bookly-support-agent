@@ -172,6 +172,42 @@ email address" without the "please don't share your password" that preceded it.
 is a deliberate departure from the spec pseudocode and is noted as such in the
 docstring.
 
+## Defects found by probing the finished system
+
+Stage 4 exercised the happy paths. These three came from asking "what happens
+if the model disobeys, or if a turn never finishes?" and then running it. Each
+was observed before it was fixed, and each has a regression test in
+`tests/test_regressions.py`, kept separate so the ten tests the brief asked for
+stay exactly as specified.
+
+**1. `route_to` could strand a customer in the terminal state.** Every
+procedure listed `human_handoff` as an exit, so `can_transition` allowed it,
+and `route_to`'s `department` enum was the only thing keeping a model out. A
+model that ignored the enum landed in the terminal state — zero tools, no way
+forward — while `escalate_to_human` had never run, so `handoff_summary` was
+empty and **no handoff had been queued**. The customer was still told "I'm
+connecting you with a teammate now". `human_handoff` is no longer an exit of
+anything; the only way in is `escalate_to_human`, which sets the state itself.
+The enum was the model's instruction, the table is the enforcement.
+
+**2. A timed-out turn kept running and committed its side effects.**
+`asyncio.wait_for` cannot cancel a thread, and `run_turn` mutates the
+conversation in place, so after the timeout fired and the customer was told the
+turn had failed, the abandoned turn carried on writing into the conversation
+that had already been saved: 3 messages and 2 LLM calls at the moment of
+replying, 9 messages and 4 calls four seconds later. State changes and ticket
+writes landed too, so a `confirm_return` could execute a real return on a turn
+the customer believed had failed. The turn now runs against a deep copy that is
+committed only on success, and a `should_stop` flag ends the loop at the next
+round boundary. Checked and *not* true: the half-finished transcript does not
+break the next turn — the API accepts it and the retry succeeds.
+
+**3. After handoff, the agent re-engaged.** With `state="human_handoff"` and an
+empty tool list, the live model answered "Of course — what do you need help
+with?" — an offer it had no tools to keep, in a state a teammate already owned.
+`run_turn` now short-circuits there and returns the fixed line without calling
+the model, which also takes that turn from ~1,500 ms and one call to 0 and 0.
+
 ## Authorship
 
 Everything in this repo was produced in one working session with Cursor, in
