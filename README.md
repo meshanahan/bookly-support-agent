@@ -108,10 +108,23 @@ wall-clock time.
 Hold **Hold to talk**. The browser transcribes with `SpeechRecognition`, posts
 the transcript with `mode: "voice"`, and speaks the reply with
 `speechSynthesis`; starting to talk cancels any speech in progress, so you can
-interrupt. In voice mode the prompt gains a mixin that reads order numbers and
-emails back before using them. A browser without the speech APIs shows a notice
-and still works by typing. Chrome is the safe choice; Firefox has no
-`SpeechRecognition`.
+interrupt. A browser without the speech APIs shows a notice and still works by
+typing. Chrome is the safe choice; Firefox has no `SpeechRecognition`.
+
+Spoken replies have their own character, and it lives in two places:
+
+- **Wording** — `VOICE_MIXIN` in `app/prompts.py` asks for warm, upbeat,
+  idol-ish phrasing, and it is only ever added when `mode == "voice"`, so
+  typed chat stays plain. The read-back discipline is unchanged: order numbers
+  and emails are spoken back and confirmed before they are used, and refusals
+  stay clear rather than being softened by the warmth.
+- **The voice itself** — the **Speaking voice** picker under the composer,
+  with **Preview**. It defaults to a Korean voice where one exists (macOS's
+  Yuna reads English with a Korean accent), then falls back to a bright
+  English one. Available voices differ a lot by OS and browser, so the picker
+  is the real answer and the default is only a good first guess. There is no
+  persistence, per the no-localStorage rule, so a reload returns to the
+  default.
 
 ## Mock data
 

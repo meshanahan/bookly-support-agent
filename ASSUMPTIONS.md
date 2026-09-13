@@ -61,7 +61,11 @@ Plainly, what this demo does not do.
 
 - **Browser speech APIs stand in for a production STT/TTS vendor.**
   `SpeechRecognition` and `speechSynthesis` are free, unstreamed, and vary by
-  browser. Production would use a streaming vendor over WebRTC.
+  browser. Production would use a streaming vendor over WebRTC. The spoken
+  voice is therefore whatever the operating system happens to ship: the app
+  prefers a Korean voice to match the wording and exposes a picker, but the
+  list is machine-dependent and nothing here guarantees a given customer hears
+  the same voice. A real deployment picks one vendor voice and keeps it.
 
 - **Push-to-talk stands in for VAD-based turn detection.** Holding a button is
   an unambiguous end of turn with zero infrastructure. Production needs voice

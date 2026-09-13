@@ -89,6 +89,12 @@
   .warn { background: #fef3c7; border: 1px solid #fcd34d; color: #78350f;
           padding: 9px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
   .empty { color: var(--muted); font-size: 13px; }
+  .voicebar { display: flex; align-items: center; gap: 8px; margin-top: 10px;
+              font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+  .voicebar select {
+    font: inherit; font-size: 12.5px; color: var(--ink); background: var(--paper);
+    border: 1px solid var(--line); border-radius: 7px; padding: 5px 7px; max-width: 230px;
+  }
 </style>
 </head>
 <body>
@@ -108,6 +114,11 @@
         <button type="submit" id="send">Send</button>
         <button type="button" id="talk" class="ghost" title="Hold to talk">Hold to talk</button>
       </form>
+      <div class="voicebar">
+        <label for="voice">Speaking voice</label>
+        <select id="voice"></select>
+        <button type="button" class="chip" id="preview">Preview</button>
+      </div>
     </div>
     <div style="margin-top:10px"><button type="button" class="ghost" id="reset">New conversation</button></div>
   </section>
@@ -301,13 +312,81 @@ function stopTalking(e) {
 ["mousedown", "touchstart"].forEach((ev) => $("talk").addEventListener(ev, startTalking));
 ["mouseup", "mouseleave", "touchend"].forEach((ev) => $("talk").addEventListener(ev, stopTalking));
 
-function speak(text) {
+/* ---- which voice speaks ----
+   The wording is warm and idol-ish (see VOICE_MIXIN in app/prompts.py); this
+   picks a voice to match. Default order prefers a Korean voice — macOS's Yuna
+   reads English with a Korean accent — then a bright English one. Voice lists
+   differ wildly by OS and browser, so the picker is the real answer and the
+   preference order is only a good first guess. No persistence: the Prompt B
+   rule is no localStorage, so a reload returns to the default. */
+const VOICE_PREFS = [
+  (v) => v.name === "Yuna",
+  (v) => /^ko/i.test(v.lang),
+  (v) => /korean|한국/i.test(v.name),
+  (v) => v.name === "Samantha",
+  (v) => /^en/i.test(v.lang),
+];
+let voices = [];
+let chosenVoice = null;
+
+function groupFor(v) {
+  if (/^ko/i.test(v.lang)) return "Korean";
+  if (/^en/i.test(v.lang)) return "English";
+  return "Other languages";
+}
+
+function loadVoices() {
+  if (!hasTTS) return;
+  voices = speechSynthesis.getVoices();
+  if (!voices.length) return;
+
+  for (const pref of VOICE_PREFS) {
+    const hit = voices.find(pref);
+    if (hit) { chosenVoice = hit; break; }
+  }
+  if (!chosenVoice) chosenVoice = voices[0];
+
+  const sel = $("voice");
+  sel.innerHTML = "";
+  for (const group of ["Korean", "English", "Other languages"]) {
+    const members = voices.filter((v) => groupFor(v) === group);
+    if (!members.length) continue;
+    const og = document.createElement("optgroup");
+    og.label = group;
+    for (const v of members) {
+      const o = document.createElement("option");
+      o.value = v.name;
+      o.textContent = `${v.name} (${v.lang})`;
+      o.selected = v.name === chosenVoice.name;
+      og.appendChild(o);
+    }
+    sel.appendChild(og);
+  }
+}
+
+if (hasTTS) {
+  loadVoices();
+  speechSynthesis.onvoiceschanged = loadVoices;   // the list arrives async
+  $("voice").addEventListener("change", (e) => {
+    chosenVoice = voices.find((v) => v.name === e.target.value) || chosenVoice;
+  });
+  $("preview").addEventListener("click", () => {
+    speak("Hi! I'm the Bookly support agent. What can I help you with today?", true);
+  });
+} else {
+  $("voice").disabled = true;
+  $("preview").disabled = true;
+}
+
+function speak(text, isPreview) {
   if (!hasTTS || !text) return;
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
+  if (chosenVoice) u.voice = chosenVoice;
   u.rate = 1.05;
+  u.pitch = 1.15;   // a little brighter, to match the wording
   u.onstart = () => {
-    if (recognitionEndedAt == null) return;
+    if (isPreview || recognitionEndedAt == null) return;
     const ms = Math.round(performance.now() - recognitionEndedAt);
     $("voice-ms").textContent = `${ms} ms`;
     $("voice-ms").style.color = ms <= VOICE_TARGET_MS ? "#15803d" : "#b91c1c";
