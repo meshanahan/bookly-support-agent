@@ -209,6 +209,37 @@ with?" — an offer it had no tools to keep, in a state a teammate already owned
 `run_turn` now short-circuits there and returns the fixed line without calling
 the model, which also takes that turn from ~1,500 ms and one call to 0 and 0.
 
+## Voice out — measured live against ElevenLabs Flash v2.5
+
+Vendor TTS, voice "Jessica", `mp3_44100_128`. Measured server-side in
+`app/tts.py`, so these exclude browser download and decode.
+
+| What | `tts_ms` |
+|---|---|
+| First sentence alone — what the customer waits to hear | 271, 235, 243 |
+| The same reply sent whole, without splitting | 525, 384, 394 |
+
+Splitting at the first sentence roughly halves time-to-first-audio, which is
+the only TTS number a caller can perceive: the rest is synthesized while the
+first chunk is already playing. Playback was confirmed in the browser by
+sampling the audio playhead, which advanced 0.09 → 3.12 over 3.5 s rather than
+merely downloading.
+
+Two real voice-mode turns, `/chat` then `/tts` on the first chunk:
+
+| Turn | `llm_ms` | `llm_calls` | `tts_ms` | Model + first audio |
+|---|---|---|---|---|
+| "where is my order?" | 2,022 | 2 | 355 | 2,377 ms |
+| "maya at bookly dash demo dot com" | 2,262 | 2 | 370 | 2,632 ms |
+
+**This misses the 1,500 ms target, and the audio leg is not why.** TTS is ~360
+ms of it; the model is ~2,100 ms, because a routing turn spends two sequential
+calls — one to choose the procedure, one to answer in it. The fixes are a
+streamed LLM (speak the first clause before the last token) and not paying for
+a second round trip on the routing turn. Swapping the TTS vendor again would
+buy almost nothing. The read-back discipline survives the vendor change: the
+agent said "Got it, so that's maya at bookly dash demo dot com" before using it.
+
 ## Authorship
 
 Everything in this repo was produced in one working session with Cursor, in
