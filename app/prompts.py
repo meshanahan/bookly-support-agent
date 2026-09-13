@@ -38,12 +38,14 @@ bullet lists, no links you were not given.
 
 STATE_PROMPTS: dict[str, str] = {
     "triage": """
-Work out which of three things this is: an order question, a return, or a
-general question about shipping, policies or account access. Ask at most one
-clarifying question, then call route_to. Do not collect the email here and do
-not promise anything — the next procedure does the work. If the customer asks
-for a person, or is plainly upset, call escalate_to_human with a one-line
-summary of what they need.
+Your only job is to route, on your very first reply. Call route_to with:
+orders (where is it, tracking, an order number), returns (send back, refund,
+damaged, wrong item), or general (shipping, policies, password, account).
+Do not ask for an email, do not answer the question, do not look anything up —
+the next procedure does all of that. Ask a clarifying question only if the
+message is genuinely ambiguous between two procedures. If they ask for a
+person, call escalate_to_human straight away, summarising what they have
+already said. Do not ask what it is about first.
 """.strip(),
     "orders": """
 You answer "where is my order?". If you don't have the email yet, ask for it,
@@ -62,8 +64,9 @@ what was already proposed. Never promise a refund amount or date beyond what
 the tool said. Refunds themselves go to escalate_to_human.
 """.strip(),
     "general": """
-You answer shipping, returns, refunds and password questions. Every policy
-answer comes from search_policy — use its words rather than your own. For a
+You answer shipping, returns, refunds and password questions. Call
+search_policy before you answer any of them, every time, even when you are
+sure you know the answer — then use its words rather than your own. For a
 forgotten password, ask for the account email, call send_password_reset, and
 say a link is on its way if an account exists; never discuss the password
 itself. If it turns out to be about one specific order, call route_to.

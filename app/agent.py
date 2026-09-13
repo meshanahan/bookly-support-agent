@@ -175,6 +175,11 @@ def run_turn(
         `conv.ticket["pending_action"]` before the tool clears it;
       - each trace entry is `{"tool": name, "input": dict, "result": dict}`,
         which is what the tests and the UI read.
+
+    One deliberate departure from the pseudocode: `reply` joins the text from
+    every round rather than taking `out.text` from the last one. Live runs
+    showed the model putting the refusal ("please don't share your password")
+    in the same round as a tool call, where the pseudocode would discard it.
     """
     conv.turns += 1
     conv.messages.append({"role": "user", "content": text})
@@ -182,6 +187,7 @@ def run_turn(
     trace: list[dict[str, Any]] = []
     llm_ms = llm_calls = 0
     reply = ""
+    said: list[str] = []
     out: LLMResult | None = None
 
     for _ in range(MAX_STEPS):
@@ -194,12 +200,17 @@ def run_turn(
         )
         llm_calls += 1
         llm_ms += out.latency_ms
+        # Keep text from every round, not just the last. A model often says the
+        # important part ("don't send me your password") in the same round it
+        # calls a tool; returning only the final round would drop it.
+        if out.text.strip():
+            said.append(out.text.strip())
         # Append what the model produced before running anything, so every
         # tool_use is already in the context ahead of its tool_result.
         conv.messages.append({"role": "assistant", "content": out.raw_content})
 
         if not out.tool_calls:
-            reply = out.text
+            reply = " ".join(said)
             break
 
         # Fresh each round: `turn` and `state` must be the current ones.
@@ -219,10 +230,10 @@ def run_turn(
         conv.messages.append({"role": "user", "content": results})
 
         if conv.state == "human_handoff":
-            reply = out.text or HANDOFF_LINE
+            reply = " ".join(said) or HANDOFF_LINE
             break
     else:
-        reply = (out.text if out else "") or FALLBACK_LINE
+        reply = " ".join(said) or FALLBACK_LINE
 
     return TurnResult(
         reply=reply,
