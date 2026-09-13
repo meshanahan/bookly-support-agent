@@ -59,13 +59,11 @@ Plainly, what this demo does not do.
   the end of speech recognition to the first spoken audio. `MAX_STEPS = 4`
   bounds LLM calls per turn — cost and loop risk — not wall-clock time.
 
-- **Browser speech APIs stand in for a production STT/TTS vendor.**
-  `SpeechRecognition` and `speechSynthesis` are free, unstreamed, and vary by
-  browser. Production would use a streaming vendor over WebRTC. The spoken
-  voice is therefore whatever the operating system happens to ship: the app
-  prefers a Korean voice to match the wording and exposes a picker, but the
-  list is machine-dependent and nothing here guarantees a given customer hears
-  the same voice. A real deployment picks one vendor voice and keeps it.
+- Voice: speech-to-text runs in the browser (Chrome/Safari). Text-to-speech
+  uses a vendor (ElevenLabs Flash v2.5 by default) through a one-file adapter,
+  non-streaming, with the reply split at the first sentence to cut
+  time-to-first-audio; the browser voice is the automatic fallback. Production
+  would stream both legs over WebRTC.
 
 - **Push-to-talk stands in for VAD-based turn detection.** Holding a button is
   an unambiguous end of turn with zero infrastructure. Production needs voice

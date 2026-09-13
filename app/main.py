@@ -17,13 +17,14 @@ import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .agent import run_turn
 from .llm import complete
 from .state import Conversation
+from .tts import enabled as tts_enabled, provider as tts_provider, synthesize
 
 TIMEOUT_S = 25.0
 TIMEOUT_REPLY = (
@@ -61,7 +62,7 @@ class ResetRequest(BaseModel):
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "tts": tts_provider()}
 
 
 @app.post("/reset")
@@ -71,6 +72,36 @@ def reset(req: ResetRequest) -> dict[str, str]:
     conv = Conversation()
     save_conversation(conv)
     return {"conversation_id": conv.id, "state": conv.state}
+
+
+class TTSRequest(BaseModel):
+    text: str
+
+
+@app.post("/tts")
+async def tts(req: TTSRequest) -> Response:
+    """Vendor voice for the audio leg.
+
+    204 means "not configured or unavailable"; the browser then speaks the text
+    itself, so a TTS outage degrades the voice, never the turn.
+    """
+    if not tts_enabled():
+        return Response(status_code=204)
+    try:
+        result = await asyncio.wait_for(asyncio.to_thread(synthesize, req.text), 15.0)
+    except Exception:
+        return Response(status_code=204)
+    if result is None:
+        return Response(status_code=204)
+    return Response(
+        content=result.audio,
+        media_type=result.mime,
+        headers={
+            "X-TTS-Latency-Ms": str(result.latency_ms),
+            "X-TTS-Provider": result.provider,
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @app.post("/chat")

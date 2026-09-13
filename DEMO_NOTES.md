@@ -18,6 +18,7 @@ grep -n "def run_turn\|def compact_context\|MAX_STEPS" app/agent.py
 | Default to a fast small model | `claude-haiku-4-5` | `app/llm.py:19` |
 | Script the agent: each procedure = short prompt + tool subset + allowed exits | the procedure table | `app/state.py:22-59` |
 | Function-calling discipline: one `tool_use`, exactly one `tool_result` | one result block per call, one message per round | `app/agent.py:85-91`, `app/agent.py:208-219` |
+| Production audio leg behind a one-file adapter; browser fallback | vendor TTS, latency measured, 204 → browser voice | `app/tts.py`, `app/main.py` `/tts`, `app/static/index.html` `speak()` |
 | Validate every model-generated input before it touches data | id/email regexes and the scoping check | `app/tools.py:21-22`, `app/tools.py:94-108` |
 | Voice mixin: transcript in, speech out, read identifiers back | `VOICE_MIXIN`, added only in voice mode | `app/prompts.py:77-96`, `app/prompts.py:107-108` |
 
