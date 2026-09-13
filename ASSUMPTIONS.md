@@ -28,11 +28,14 @@ Plainly, what this demo does not do.
   production this belongs behind an explicit UI confirmation or an
   out-of-band approval, not a model's reading of a transcript.
 
-- **The model can still misstate a tool result.** Nothing forces the reply to
-  match the JSON it was given. Mitigations here are small, flat tool outputs
-  and a prompt rule against stating order facts that did not come from a
-  tool; the real mitigation is an eval suite with a simulated customer, which
-  is not in this build.
+- **The model can still misstate a tool result — observed, not theoretical.**
+  Nothing forces the reply to match the JSON it was given. In the first Stage 4
+  run the agent told a customer "Perfect, I've confirmed your return for order
+  BK-10002" on a turn where it called no tool at all: the proposal was still
+  pending and no RMA existed. The server was never fooled and nothing was
+  executed, but the customer was misinformed. A prompt rule made it rare
+  (5/5 correct after), small flat tool outputs help, and the eval caught it —
+  but only an explicit UI confirmation removes it. See `DEMO_NOTES.md`.
 
 - **The offline tests measure pass@1 on scripted decisions; the product needs
   pass^k.** Ten tests with a fake LLM prove the orchestration behaves given a
