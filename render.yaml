@@ -13,3 +13,13 @@ services:
         value: anthropic
       - key: ANTHROPIC_MODEL
         value: claude-haiku-4-5-20251001
+      # Voice out. Leave the key unset and the browser speaks instead — the
+      # deploy still works, it just loses the vendor voice.
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: TTS_PROVIDER
+        value: elevenlabs
+      - key: ELEVENLABS_VOICE_ID
+        value: cgSgspJ2msm6clMCkdW9
+      - key: ELEVENLABS_MODEL
+        value: eleven_flash_v2_5

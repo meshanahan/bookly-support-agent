@@ -1,4 +1,8 @@
+# `.env` alone would not cover `.env.local`, `.env.production` and friends, so
+# ignore every variant and add back the one that is meant to ship.
 .env
+.env.*
+!.env.example
 .venv/
 venv/
 __pycache__/
