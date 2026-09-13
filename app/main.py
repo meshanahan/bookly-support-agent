@@ -24,7 +24,13 @@ from pydantic import BaseModel
 from .agent import run_turn
 from .llm import complete
 from .state import Conversation
-from .tts import enabled as tts_enabled, provider as tts_provider, synthesize
+from .tts import (
+    default_voice,
+    enabled as tts_enabled,
+    provider as tts_provider,
+    synthesize,
+    voices as tts_voices,
+)
 
 TIMEOUT_S = 25.0
 TIMEOUT_REPLY = (
@@ -76,6 +82,19 @@ def reset(req: ResetRequest) -> dict[str, str]:
 
 class TTSRequest(BaseModel):
     text: str
+    voice_id: str | None = None
+
+
+@app.get("/voices")
+async def list_voices() -> dict[str, Any]:
+    """The voices the UI may offer. The vendor key never leaves the server, so
+    the browser cannot ask the vendor for this itself."""
+    try:
+        found = await asyncio.wait_for(asyncio.to_thread(tts_voices), 15.0)
+    except Exception:
+        found = []
+    return {"provider": tts_provider(), "default": default_voice() if found else "",
+            "voices": found}
 
 
 @app.post("/tts")
@@ -88,7 +107,9 @@ async def tts(req: TTSRequest) -> Response:
     if not tts_enabled():
         return Response(status_code=204)
     try:
-        result = await asyncio.wait_for(asyncio.to_thread(synthesize, req.text), 15.0)
+        result = await asyncio.wait_for(
+            asyncio.to_thread(synthesize, req.text, req.voice_id), 15.0
+        )
     except Exception:
         return Response(status_code=204)
     if result is None:
@@ -99,6 +120,7 @@ async def tts(req: TTSRequest) -> Response:
         headers={
             "X-TTS-Latency-Ms": str(result.latency_ms),
             "X-TTS-Provider": result.provider,
+            "X-TTS-Voice": result.voice,
             "Cache-Control": "no-store",
         },
     )

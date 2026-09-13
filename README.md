@@ -149,15 +149,12 @@ and one `cancelled`. All fictional.
 By default the browser speaks replies. To use a production voice:
 
 1. Set `TTS_PROVIDER=elevenlabs` and `ELEVENLABS_API_KEY` in `.env` (free tier is enough for the demo).
-2. Pick a voice by ear, then set `ELEVENLABS_VOICE_ID`:
+2. Restart the server. `GET /health` shows `"tts": "elevenlabs"`; the side panel shows `tts_ms` per reply.
+3. Pick a voice by ear from the menu next to **Preview**, which lists the voices on your account. `GET /voices` proxies them, because the vendor key stays on the server and the browser never sees it.
 
-```bash
-   curl -s https://api.elevenlabs.io/v1/voices -H "xi-api-key: $ELEVENLABS_API_KEY" \
-     | python3 -c "import sys,json; [print(v['voice_id'], v['name'], v.get('labels',{})) for v in json.load(sys.stdin)['voices']]"
-```
+The starting voice is `ELEVENLABS_VOICE_ID`, defaulting to the premade voice "Jessica" (expressive, upbeat); "Sarah" and "Matilda" are the calmer alternatives. Set that variable to change what every session starts with — the menu is a per-session override and is deliberately not persisted.
 
-   The default is the premade voice "Jessica" (expressive, upbeat). "Sarah" and "Matilda" are the calmer alternatives.
-3. Restart the server. `GET /health` shows `"tts": "elevenlabs"`; the side panel shows `tts_ms` per reply.
+A voice chosen in the browser is a request, not a command: `/tts` re-checks it against the account's real voices and quietly falls back to the default if it does not match, so a stale or forged id costs the customer nothing and never reaches the vendor URL.
 
 If `/tts` returns 204 for any reason (no key, vendor down, timeout) the browser voice takes over automatically — the turn never fails because of audio.
 

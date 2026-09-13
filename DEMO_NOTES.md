@@ -225,6 +225,15 @@ first chunk is already playing. Playback was confirmed in the browser by
 sampling the audio playhead, which advanced 0.09 → 3.12 over 3.5 s rather than
 merely downloading.
 
+The voice is chosen in the UI from the 21 voices on the account. `GET /voices`
+proxies the vendor listing because the key stays server-side, and the selection
+travels with each `/tts` call — where it is checked against that same list
+before use. Verified live: asking for Laura returned
+`x-tts-voice: FGY2WhTYpPnrIDTdsKH5`, while `voice_id: "../../../v1/user"`
+returned ordinary audio in the default voice, `x-tts-voice: cgSgspJ2msm6clMCkdW9`.
+The same shape as the tool allowlist — the client proposes, the server decides —
+and it keeps caller input out of the vendor URL path.
+
 Two real voice-mode turns, `/chat` then `/tts` on the first chunk:
 
 | Turn | `llm_ms` | `llm_calls` | `tts_ms` | Model + first audio |

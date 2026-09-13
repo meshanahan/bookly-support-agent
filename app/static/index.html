@@ -92,6 +92,10 @@
   .voicebar { display: flex; align-items: center; gap: 8px; margin-top: 10px;
               font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
   .voicebar b { color: var(--ink); font-weight: 600; }
+  .voicebar select {
+    font: inherit; font-size: 12.5px; color: var(--ink); background: var(--paper);
+    border: 1px solid var(--line); border-radius: 7px; padding: 5px 7px; max-width: 260px;
+  }
 </style>
 </head>
 <body>
@@ -113,6 +117,7 @@
       </form>
       <div class="voicebar">
         <span>Voice out: <b id="tts-provider">—</b></span>
+        <select id="voice" hidden></select>
         <button type="button" class="chip" id="preview">Preview</button>
       </div>
     </div>
@@ -310,14 +315,32 @@ function stopTalking(e) {
 ["mouseup", "mouseleave", "touchend"].forEach((ev) => $("talk").addEventListener(ev, stopTalking));
 
 /* ---- which voice speaks ----
-   The server owns this now: `/tts` returns vendor audio and the browser voice
-   is only the fallback, so there is nothing here to choose. Report which leg
-   is live so the label matches what you actually hear, and let Preview play
-   it. The browser's own voice list is deliberately not offered — picking from
-   it would have described only the fallback. */
-fetch("/health")
+   The server owns the audio leg, so the menu is the vendor's voices, not the
+   browser's: `/voices` proxies them because the vendor key never leaves the
+   server. The selection rides along with each `/tts` request and is re-checked
+   there against the account's real voices, so it is a request, not a command.
+   With no vendor configured the menu stays hidden and the browser voice speaks,
+   exactly as before. Nothing is persisted — the no-localStorage rule — so a
+   reload returns to the server's configured default. */
+let chosenVoiceId = null;
+
+fetch("/voices")
   .then((r) => r.json())
-  .then((h) => ($("tts-provider").textContent = h.tts === "browser" ? "browser" : h.tts))
+  .then((data) => {
+    $("tts-provider").textContent = data.provider === "browser" ? "browser" : data.provider;
+    if (!data.voices.length) return;          // no vendor, or it could not be reached
+    chosenVoiceId = data.default;
+    const sel = $("voice");
+    for (const v of data.voices) {
+      const o = document.createElement("option");
+      o.value = v.id;
+      o.textContent = v.description ? `${v.name} — ${v.description}` : v.name;
+      o.selected = v.id === data.default;
+      sel.appendChild(o);
+    }
+    sel.hidden = false;
+    sel.addEventListener("change", (e) => { chosenVoiceId = e.target.value; });
+  })
   .catch(() => ($("tts-provider").textContent = hasTTS ? "browser" : "unavailable"));
 
 $("preview").addEventListener("click", () => {
@@ -354,11 +377,13 @@ async function fetchTTS(text) {
   const r = await fetch("/tts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, voice_id: chosenVoiceId }),
   });
   if (r.status !== 200) throw new Error("tts unavailable");
-  const ms = r.headers.get("X-TTS-Latency-Ms"), prov = r.headers.get("X-TTS-Provider");
-  if (ms && $("tts-ms")) $("tts-ms").textContent = `${ms} ms · ${prov}`;
+  // Just the number: the provider already has its own label in the voice bar,
+  // and repeating it here made the chip wide enough to break the latency row.
+  const ms = r.headers.get("X-TTS-Latency-Ms");
+  if (ms && $("tts-ms")) $("tts-ms").textContent = `${ms} ms`;
   return URL.createObjectURL(await r.blob());
 }
 

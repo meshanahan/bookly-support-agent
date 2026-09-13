@@ -27,6 +27,12 @@ OPENAI_STYLE = (
 )
 MAX_CHARS = 600          # a support reply; longer text is truncated, not refused
 TIMEOUT_S = 15.0
+OPENAI_VOICES = ("alloy", "ash", "ballad", "coral", "echo", "fable", "nova",
+                 "onyx", "sage", "shimmer")
+
+# Keyed by provider so flipping TTS_PROVIDER cannot serve one vendor's list for
+# another. Only successful lookups are cached; a failed one stays retryable.
+_VOICE_CACHE: dict[str, list[dict[str, str]]] = {}
 
 
 @dataclass
@@ -35,6 +41,7 @@ class TTSResult:
     mime: str
     latency_ms: int
     provider: str
+    voice: str = ""
 
 
 def provider() -> str:
@@ -46,21 +53,83 @@ def enabled() -> bool:
     return provider() in ("elevenlabs", "openai")
 
 
-def synthesize(text: str) -> TTSResult | None:
-    """One TTS call. Returns None when no vendor is configured or text is empty."""
+def default_voice() -> str:
+    """The voice used when the caller does not ask for one."""
+    if provider() == "openai":
+        return os.getenv("OPENAI_TTS_VOICE", DEFAULT_OPENAI_VOICE)
+    return os.getenv("ELEVENLABS_VOICE_ID", DEFAULT_ELEVEN_VOICE)
+
+
+def voices() -> list[dict[str, str]]:
+    """The voices this account can use: [{id, name, description}].
+
+    Empty when no vendor is configured or the vendor cannot be reached — the UI
+    then simply offers no choice, which is the same outcome as before.
+    """
+    key = provider()
+    if key in _VOICE_CACHE:
+        return _VOICE_CACHE[key]
+    if key == "openai":
+        found = [{"id": v, "name": v, "description": ""} for v in OPENAI_VOICES]
+    elif key == "elevenlabs":
+        try:
+            found = _eleven_voices()
+        except Exception:
+            return []          # transient: do not cache, let the next call retry
+    else:
+        found = []
+    _VOICE_CACHE[key] = found
+    return found
+
+
+def _eleven_voices() -> list[dict[str, str]]:
+    r = httpx.get(
+        "https://api.elevenlabs.io/v1/voices",
+        headers={"xi-api-key": os.environ["ELEVENLABS_API_KEY"]},
+        timeout=TIMEOUT_S,
+    )
+    r.raise_for_status()
+    out = []
+    for v in r.json().get("voices", []):
+        # Names arrive as "Jessica - Playful, Bright, Warm".
+        name, _, description = str(v.get("name", "")).partition(" - ")
+        out.append({"id": v["voice_id"], "name": name.strip(),
+                    "description": description.strip()})
+    return out
+
+
+def synthesize(text: str, voice_id: str | None = None) -> TTSResult | None:
+    """One TTS call. Returns None when no vendor is configured or text is empty.
+
+    `voice_id` comes from the browser, so it is never passed through on trust:
+    it is used only if it matches a voice this account actually has. Anything
+    else falls back to the configured default rather than erroring, because a
+    stale selection should cost the customer nothing. That check also keeps
+    client input out of the vendor URL path.
+    """
     if not enabled() or not text or not text.strip():
         return None
     clean = " ".join(text.split())[:MAX_CHARS]
+    chosen = voice_id if voice_id and _is_known_voice(voice_id) else None
     t0 = time.perf_counter()
     if provider() == "elevenlabs":
-        audio, mime = _elevenlabs(clean)
+        # Called with one argument when there is no override, so a test may
+        # stand in for this with a single-parameter fake.
+        audio, mime = _elevenlabs(clean, chosen) if chosen else _elevenlabs(clean)
     else:
-        audio, mime = _openai(clean)
-    return TTSResult(audio, mime, int((time.perf_counter() - t0) * 1000), provider())
+        audio, mime = _openai(clean, chosen) if chosen else _openai(clean)
+    return TTSResult(audio, mime, int((time.perf_counter() - t0) * 1000), provider(),
+                     chosen or default_voice())
 
 
-def _elevenlabs(text: str) -> tuple[bytes, str]:
-    voice_id = os.getenv("ELEVENLABS_VOICE_ID", DEFAULT_ELEVEN_VOICE)
+def _is_known_voice(voice_id: str) -> bool:
+    """Only consults the vendor when an override was actually supplied, and the
+    list is already warm because the UI fetched it to build its menu."""
+    return any(v["id"] == voice_id for v in voices())
+
+
+def _elevenlabs(text: str, voice_id: str | None = None) -> tuple[bytes, str]:
+    voice_id = voice_id or default_voice()
     model_id = os.getenv("ELEVENLABS_MODEL", DEFAULT_ELEVEN_MODEL)
     r = httpx.post(
         f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
@@ -88,13 +157,13 @@ def _elevenlabs(text: str) -> tuple[bytes, str]:
     return r.content, "audio/mpeg"
 
 
-def _openai(text: str) -> tuple[bytes, str]:
+def _openai(text: str, voice_id: str | None = None) -> tuple[bytes, str]:
     from openai import OpenAI  # lazy: never imported in tests
 
     client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     resp = client.audio.speech.create(
         model=os.getenv("OPENAI_TTS_MODEL", DEFAULT_OPENAI_MODEL),
-        voice=os.getenv("OPENAI_TTS_VOICE", DEFAULT_OPENAI_VOICE),
+        voice=voice_id or default_voice(),
         input=text,
         instructions=OPENAI_STYLE,
         response_format="mp3",
