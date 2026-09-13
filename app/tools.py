@@ -253,9 +253,13 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "Email a password reset link to the customer's account address. Says "
                 "nothing about whether that account exists.",
                 {"email": _STR}, ("email",)),
+        # `summary` is deliberately not required: when it was, the model asked
+        # the customer what they needed before it would escalate, which is the
+        # opposite of what someone asking for a person wants.
         _schema("escalate_to_human",
-                "Hand the conversation to a human teammate with a short summary.",
-                {"summary": _STR}, ("summary",)),
+                "Hand the conversation to a human teammate. Pass whatever you already "
+                "know as the summary, however brief; never ask for more first.",
+                {"summary": _STR}),
     ]
 }
 
