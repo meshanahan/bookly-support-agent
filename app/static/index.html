@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bookly — support</title>
+<style>
+  :root {
+    --accent: #b45309;
+    --accent-soft: #fdf0e3;
+    --ink: #1c1917;
+    --muted: #78716c;
+    --line: #e7e1d8;
+    --paper: #faf7f2;
+    --card: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 15px/1.5 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 12px;
+    padding: 18px 24px; border-bottom: 1px solid var(--line); background: var(--card);
+  }
+  .wordmark {
+    font-family: ui-serif, Georgia, "Times New Roman", serif;
+    font-size: 26px; font-weight: 700; letter-spacing: -0.02em;
+  }
+  .wordmark span { color: var(--accent); }
+  .tagline { color: var(--muted); font-size: 13px; }
+  main {
+    display: grid; grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 20px; padding: 20px 24px; max-width: 1200px; margin: 0 auto;
+    align-items: start;
+  }
+  @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); } }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 16px;
+  }
+  #history { height: 60vh; min-height: 340px; overflow-y: auto; display: flex;
+             flex-direction: column; gap: 10px; padding-right: 4px; }
+  .msg { max-width: 82%; padding: 9px 13px; border-radius: 14px; white-space: pre-wrap; }
+  .msg.user { align-self: flex-end; background: var(--accent); color: #fff;
+              border-bottom-right-radius: 4px; }
+  .msg.agent { align-self: flex-start; background: #f4f1ec; border-bottom-left-radius: 4px; }
+  .msg.system { align-self: center; color: var(--muted); font-size: 13px; background: none; }
+  .msg .tag { display: block; font-size: 11px; opacity: .75; margin-bottom: 2px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; margin: 12px 0; }
+  .chip {
+    border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+    border-radius: 999px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .composer { display: flex; gap: 8px; align-items: stretch; }
+  input[type=text] {
+    flex: 1; padding: 11px 13px; border: 1px solid var(--line);
+    border-radius: 9px; font: inherit; background: var(--paper);
+  }
+  input[type=text]:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  button {
+    font: inherit; border-radius: 9px; border: 1px solid var(--accent);
+    background: var(--accent); color: #fff; padding: 11px 16px; cursor: pointer;
+  }
+  button.ghost { background: var(--card); color: var(--accent); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  #talk.recording { background: #b91c1c; border-color: #b91c1c; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .07em;
+       color: var(--muted); margin: 0 0 9px; }
+  .panel + .panel { margin-top: 14px; }
+  .pill {
+    display: inline-block; background: var(--accent-soft); color: var(--accent);
+    border-radius: 999px; padding: 4px 12px; font-weight: 600; font-size: 14px;
+  }
+  .facts { margin: 0; font-size: 14px; }
+  .facts div { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; }
+  .facts .k { color: var(--muted); }
+  .facts .v { text-align: right; word-break: break-word; }
+  .pending { background: var(--accent-soft); border-left: 3px solid var(--accent);
+             padding: 8px 10px; border-radius: 6px; margin-top: 8px; font-size: 13px; }
+  .lat { display: flex; gap: 14px; font-variant-numeric: tabular-nums; }
+  .lat b { display: block; font-size: 19px; font-weight: 600; }
+  .lat span { font-size: 11px; color: var(--muted); }
+  .note { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.45; }
+  pre { background: var(--paper); border: 1px solid var(--line); border-radius: 8px;
+        padding: 10px; font-size: 11.5px; max-height: 300px; overflow: auto; margin: 0;
+        white-space: pre-wrap; word-break: break-word; }
+  .warn { background: #fef3c7; border: 1px solid #fcd34d; color: #78350f;
+          padding: 9px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
+  .empty { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wordmark">Book<span>ly</span></div>
+  <div class="tagline">support — order status, returns, and questions</div>
+</header>
+
+<main>
+  <section>
+    <div id="speech-warning" class="warn" hidden></div>
+    <div class="card">
+      <div id="history"><div class="msg system">Ask about an order, a return, or a policy.</div></div>
+      <div class="chips" id="chips"></div>
+      <form class="composer" id="composer">
+        <input type="text" id="text" placeholder="Type your message…" autocomplete="off" />
+        <button type="submit" id="send">Send</button>
+        <button type="button" id="talk" class="ghost" title="Hold to talk">Hold to talk</button>
+      </form>
+    </div>
+    <div style="margin-top:10px"><button type="button" class="ghost" id="reset">New conversation</button></div>
+  </section>
+
+  <aside>
+    <div class="card panel">
+      <h2>Procedure</h2>
+      <span class="pill" id="state">triage</span>
+    </div>
+
+    <div class="card panel">
+      <h2>Known facts</h2>
+      <div class="facts" id="facts"><div class="empty">Nothing collected yet.</div></div>
+    </div>
+
+    <div class="card panel">
+      <h2>Latency</h2>
+      <div class="lat">
+        <div><b id="llm-ms">—</b><span>llm_ms</span></div>
+        <div><b id="total-ms">—</b><span>total_ms</span></div>
+        <div><b id="llm-calls">—</b><span>llm_calls</span></div>
+        <div><b id="voice-ms">—</b><span>voice_ms</span></div>
+      </div>
+      <div class="note">
+        Server time (excludes STT/TTS/network). <code>voice_ms</code> is measured in
+        this browser from the end of speech recognition to the first spoken audio.
+        Target 1,500 ms voice-to-voice — a target, not a guarantee.
+      </div>
+    </div>
+
+    <div class="card panel">
+      <h2>Tool trace</h2>
+      <pre id="trace">No tools called yet.</pre>
+    </div>
+  </aside>
+</main>
+
+<script>
+const CHIPS = [
+  "Where is my order?",
+  "I want to return a book",
+  "What's your return policy?",
+  "I forgot my password",
+  "Get me a person",
+];
+const VOICE_TARGET_MS = 1500;
+
+const $ = (id) => document.getElementById(id);
+let conversationId = null;
+let busy = false;
+
+CHIPS.forEach((label) => {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "chip"; b.textContent = label;
+  b.onclick = () => send(label, "text");
+  $("chips").appendChild(b);
+});
+
+$("composer").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const v = $("text").value.trim();
+  if (v) { $("text").value = ""; send(v, "text"); }
+});
+
+$("reset").addEventListener("click", async () => {
+  await fetch("/reset", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ conversation_id: conversationId }),
+  });
+  conversationId = null;
+  $("history").innerHTML = '<div class="msg system">New conversation.</div>';
+  $("state").textContent = "triage";
+  $("facts").innerHTML = '<div class="empty">Nothing collected yet.</div>';
+  $("trace").textContent = "No tools called yet.";
+  ["llm-ms", "total-ms", "llm-calls", "voice-ms"].forEach((k) => ($(k).textContent = "—"));
+});
+
+function bubble(role, text, tag) {
+  const d = document.createElement("div");
+  d.className = "msg " + role;
+  if (tag) {
+    const t = document.createElement("span");
+    t.className = "tag"; t.textContent = tag; d.appendChild(t);
+  }
+  d.appendChild(document.createTextNode(text));
+  $("history").appendChild(d);
+  $("history").scrollTop = $("history").scrollHeight;
+  return d;
+}
+
+async function send(text, mode) {
+  if (busy) return;
+  busy = true; $("send").disabled = true;
+  bubble("user", text, mode === "voice" ? "spoken" : null);
+  const thinking = bubble("system", "…");
+  try {
+    const res = await fetch("/chat", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversation_id: conversationId, text, mode }),
+    });
+    const data = await res.json();
+    thinking.remove();
+    conversationId = data.conversation_id;
+    bubble("agent", data.reply);
+    render(data);
+    if (mode === "voice") speak(data.reply);
+  } catch (err) {
+    thinking.remove();
+    bubble("system", "Could not reach the server: " + err.message);
+  } finally {
+    busy = false; $("send").disabled = false;
+  }
+}
+
+function render(data) {
+  $("state").textContent = data.state;
+  $("llm-ms").textContent = data.llm_ms + " ms";
+  $("total-ms").textContent = data.total_ms + " ms";
+  $("llm-calls").textContent = data.llm_calls;
+
+  const t = data.ticket || {};
+  const rows = [
+    ["Email", t.email], ["Order", t.order_id],
+    ["Return reason", t.return_reason], ["Handoff", t.handoff_summary],
+  ].filter(([, v]) => v);
+  const facts = $("facts");
+  facts.innerHTML = rows.length
+    ? rows.map(([k, v]) => `<div><span class="k">${k}</span><span class="v">${esc(v)}</span></div>`).join("")
+    : '<div class="empty">Nothing collected yet.</div>';
+  if (t.pending_action) {
+    const p = t.pending_action;
+    facts.insertAdjacentHTML("beforeend",
+      `<div class="pending"><b>Awaiting customer confirmation</b><br>` +
+      `${esc(p.action)} of ${esc(p.order_id)} — ${esc(p.reason)}</div>`);
+  }
+
+  $("trace").textContent = (data.tool_trace && data.tool_trace.length)
+    ? JSON.stringify(data.tool_trace, null, 2)
+    : "No tools called this turn.";
+}
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+/* ---- voice: push to talk, browser STT in, browser TTS out ---- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const hasTTS = "speechSynthesis" in window;
+let recognition = null, transcript = "", recognitionEndedAt = null;
+
+if (!SR || !hasTTS) {
+  const w = $("speech-warning");
+  w.hidden = false;
+  w.textContent = !SR && !hasTTS
+    ? "This browser has no speech recognition or synthesis. Typing works; hold-to-talk is disabled."
+    : (!SR ? "This browser cannot do speech recognition — hold-to-talk is disabled. Typing works."
+           : "This browser cannot speak replies. Hold-to-talk will still transcribe.");
+  if (!SR) $("talk").disabled = true;
+}
+
+if (SR) {
+  recognition = new SR();
+  recognition.lang = "en-US";
+  recognition.interimResults = false;
+  recognition.continuous = false;
+  recognition.onresult = (e) => { transcript = e.results[0][0].transcript; };
+  recognition.onerror = () => { transcript = ""; };
+  recognition.onend = () => {
+    // Turn ends when the button is released; this is where voice_ms starts.
+    recognitionEndedAt = performance.now();
+    $("talk").classList.remove("recording");
+    $("talk").textContent = "Hold to talk";
+    if (transcript.trim()) send(transcript.trim(), "voice");
+    transcript = "";
+  };
+}
+
+function startTalking(e) {
+  e.preventDefault();
+  if (!recognition || busy) return;
+  if (hasTTS) speechSynthesis.cancel();   // barge-in: stop speaking the moment they do
+  transcript = ""; recognitionEndedAt = null;
+  $("voice-ms").textContent = "—";
+  $("talk").classList.add("recording");
+  $("talk").textContent = "Listening…";
+  try { recognition.start(); } catch (_) {}
+}
+function stopTalking(e) {
+  e.preventDefault();
+  if (recognition) { try { recognition.stop(); } catch (_) {} }
+}
+["mousedown", "touchstart"].forEach((ev) => $("talk").addEventListener(ev, startTalking));
+["mouseup", "mouseleave", "touchend"].forEach((ev) => $("talk").addEventListener(ev, stopTalking));
+
+function speak(text) {
+  if (!hasTTS || !text) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate = 1.05;
+  u.onstart = () => {
+    if (recognitionEndedAt == null) return;
+    const ms = Math.round(performance.now() - recognitionEndedAt);
+    $("voice-ms").textContent = `${ms} ms`;
+    $("voice-ms").style.color = ms <= VOICE_TARGET_MS ? "#15803d" : "#b91c1c";
+  };
+  speechSynthesis.speak(u);
+}
+</script>
+</body>
+</html>
